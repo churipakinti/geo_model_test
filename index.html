@@ -395,35 +395,42 @@
     return files.filter(f => typeof f === 'string' && f.toLowerCase().endsWith('.glb'));
   }
 
-  function createSurfaceMaterial(color, opacity = 0.78) {
-    return new THREE.MeshBasicMaterial({
-      color,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity,
-      depthWrite: false,
-      wireframe: wireframeEnabled
-    });
-  }
+  function createSurfaceMaterial(color, opacity = 0.92) {
+  return new THREE.MeshBasicMaterial({
+    color,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity,
+    depthTest: true,
+    depthWrite: false,
+    wireframe: wireframeEnabled
+  });
+}
 
-  function applySurfaceMaterial(root, color, meshStore, surfaceName) {
-    let meshCount = 0;
+  function applySurfaceMaterial(root, color, meshStore, surfaceName, surfaceIndex, totalSurfaces) {
+  let meshCount = 0;
 
-    root.traverse(obj => {
-      if (!obj.isMesh) return;
+  root.traverse(obj => {
+    if (!obj.isMesh) return;
 
-      meshCount++;
+    meshCount++;
 
-      if (!obj.geometry.attributes.normal) {
-        obj.geometry.computeVertexNormals();
-      }
+    if (!obj.geometry.attributes.normal) {
+      obj.geometry.computeVertexNormals();
+    }
 
-      obj.material = createSurfaceMaterial(color.clone(), 0.78);
-      meshStore.push(obj);
-    });
+    obj.material = createSurfaceMaterial(color.clone(), 0.92);
 
-    console.log(`Loaded surface: ${surfaceName} | meshes: ${meshCount} | color: #${color.getHexString()}`);
-  }
+    // deeper surfaces drawn first, shallower surfaces drawn last
+    obj.renderOrder = surfaceIndex;
+
+    meshStore.push(obj);
+  });
+
+  console.log(
+    `Loaded surface: ${surfaceName} | meshes: ${meshCount} | color: #${color.getHexString()} | renderOrder: ${surfaceIndex}`
+  );
+}
 
   function buildSidebar() {
     surfacesPanel.innerHTML = '';
@@ -478,35 +485,33 @@
     });
   }
 
-  function loadSurface(file, color, idx) {
-    return new Promise((resolve, reject) => {
-      loader.load(
-        `./models/${file}`,
-        gltf => {
-          const root = gltf.scene;
-          const meshes = [];
-          const name = niceName(file);
+  function loadSurface(file, color, idx, totalFiles) {
+  return new Promise((resolve, reject) => {
+    loader.load(
+      `./models/${file}`,
+      gltf => {
+        const root = gltf.scene;
+        const meshes = [];
+        const name = niceName(file);
 
-          applySurfaceMaterial(root, color, meshes, name);
+        applySurfaceMaterial(root, color, meshes, name, idx, totalFiles);
 
-          // small visual offset only to avoid perfect overlap while debugging
-          root.position.y += idx * 40;
+        // no artificial offset now
+        modelGroup.add(root);
 
-          modelGroup.add(root);
-
-          resolve({
-            name,
-            file,
-            color,
-            meshes,
-            root
-          });
-        },
-        undefined,
-        reject
-      );
-    });
-  }
+        resolve({
+          name,
+          file,
+          color,
+          meshes,
+          root
+        });
+      },
+      undefined,
+      reject
+    );
+  });
+}
 
   function fitCamera(direction = 'persp') {
     modelGroup.updateMatrixWorld(true);
@@ -569,9 +574,9 @@
       }
 
       const promises = files.map((file, idx) => {
-        const color = colorFromIndex(idx);
-        return loadSurface(file, color, idx);
-      });
+  const color = colorFromIndex(idx);
+  return loadSurface(file, color, idx, files.length);
+});
 
       const loaded = await Promise.all(promises);
       surfaceEntries.push(...loaded);
