@@ -1,0 +1,21 @@
+{
+  "name": "s2b_image_depth",
+  "image": "./seismic/s2b_image_depth.png",
+  "start": [
+    553663.0,
+    6461082.8,
+    0.0
+  ],
+  "end": [
+    589511.7,
+    6236417.5,
+    0.0
+  ],
+  "z_top": 0.0,
+  "z_bottom": -60000.0,
+  "n_traces": 534,
+  "n_samples": 2598,
+  "sample_min": 0.0,
+  "sample_max": 64925.0,
+  "has_valid_xy": true
+}

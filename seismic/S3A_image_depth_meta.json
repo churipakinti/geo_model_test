@@ -1,0 +1,21 @@
+{
+  "name": "S3A_image_depth",
+  "image": "./seismic/S3A_image_depth.png",
+  "start": [
+    745441.79,
+    6309693.96,
+    0.0
+  ],
+  "end": [
+    833328.59,
+    6203721.48,
+    0.0
+  ],
+  "z_top": 0.0,
+  "z_bottom": -60000.0,
+  "n_traces": 1501,
+  "n_samples": 2601,
+  "sample_min": 0.0,
+  "sample_max": 65000.0,
+  "has_valid_xy": true
+}
