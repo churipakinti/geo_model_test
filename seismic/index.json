@@ -1,9 +1,5 @@
 [
   "./seismic/l9_image_depth_meta.json",
-  "./seismic/ld0043_file_00055_depth_meta.json",
-  "./seismic/ld0043_file_00085_depth_meta.json",
-  "./seismic/ld0044_file_00037_depth_meta.json",
-  "./seismic/ld0044_file_00054_depth_meta.json",
   "./seismic/S1A_image_depth_meta.json",
   "./seismic/s2b_image_depth_meta.json",
   "./seismic/S3A_image_depth_meta.json"
