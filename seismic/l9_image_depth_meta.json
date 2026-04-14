@@ -1,0 +1,21 @@
+{
+  "name": "l9_image_depth",
+  "image": "./seismic/l9_image_depth.png",
+  "start": [
+    386181.8,
+    6122177.2,
+    0.0
+  ],
+  "end": [
+    699351.2,
+    6072307.0,
+    0.0
+  ],
+  "z_top": 0.0,
+  "z_bottom": -60000.0,
+  "n_traces": 2356,
+  "n_samples": 2601,
+  "sample_min": 0.0,
+  "sample_max": 65000.0,
+  "has_valid_xy": true
+}
