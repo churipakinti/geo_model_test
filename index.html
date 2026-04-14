@@ -347,10 +347,14 @@
 
   scene.add(new THREE.AmbientLight(0xffffff, 1.0));
 
+camera.up.set(0, 0, 1);
+
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
   controls.screenSpacePanning = true;
+  controls.minPolarAngle = 0;
+  controls.maxPolarAngle = Math.PI;
 
   const modelGroup = new THREE.Group();
   scene.add(modelGroup);
