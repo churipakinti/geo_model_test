@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Geological Model</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0d0f12;
+      --panel:    #13161b;
+      --border:   #1f2530;
+      --text:     #c8d0dc;
+      --muted:    #4a5568;
+      --accent:   #e0f0ff;
+      --ok:       #4ecb82;
+      --err:      #e05a5a;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 15px;
+      overflow: hidden;
+    }
+
+    #app {
+      display: grid;
+      grid-template-rows: 52px 1fr;
+      grid-template-columns: 1fr 260px;
+      height: 100vh;
+    }
+
+    header {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+    }
+
+    header h1 {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 14px;
+      letter-spacing: 0.12em;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
+
+    .header-sep { flex: 1; }
+
+    #load-status {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+    }
+
+    #load-status.ok  { color: var(--ok); }
+    #load-status.err { color: var(--err); }
+
+    #viewer {
+      position: relative;
+      background: var(--bg);
+      overflow: hidden;
+    }
+
+    #viewer canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    aside {
+      background: var(--panel);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    .aside-section {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .aside-label {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .surf-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .surf-row:last-child { margin-bottom: 0; }
+
+    .vis-btn {
+      width: 28px;
+      height: 28px;
+      border: 1px solid var(--border);
+      background: transparent;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text);
+      font-size: 14px;
+      flex-shrink: 0;
+      transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+    }
+
+    .vis-btn:hover { background: var(--border); }
+    .vis-btn.hidden-surf { opacity: 0.3; }
+
+    .surf-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .surf-name {
+      font-size: 13px;
+      font-weight: 600;
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .op-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .op-row:last-child { margin-bottom: 0; }
+
+    .op-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .op-row input[type=range] {
+      flex: 1;
+      accent-color: var(--accent);
+      height: 3px;
+      cursor: pointer;
+    }
+
+    .op-val {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      width: 28px;
+      text-align: right;
+    }
+
+    .cam-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .cam-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      padding: 7px 4px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+      text-align: center;
+    }
+
+    .cam-btn:hover {
+      background: var(--border);
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .cam-btn.full {
+      grid-column: 1 / -1;
+    }
+
+    #hints {
+      position: absolute;
+      bottom: 12px;
+      left: 14px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.7;
+      pointer-events: none;
+    }
+
+    #overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg);
+      z-index: 20;
+      gap: 14px;
+      transition: opacity 0.4s;
+    }
+
+    #overlay.fade {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .overlay-txt {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+    }
+  </style>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <h1>⬡ 3D Geological Model</h1>
+    <div class="header-sep"></div>
+    <span id="load-status">LOADING...</span>
+  </header>
+
+  <div id="viewer">
+    <div id="overlay">
+      <div class="spinner"></div>
+      <div class="overlay-txt">LOADING SURFACES…</div>
+    </div>
+    <div id="hints">
+      LMB drag · rotate &nbsp;|&nbsp; RMB drag · pan &nbsp;|&nbsp; scroll · zoom
+    </div>
+  </div>
+
+  <aside>
+    <div class="aside-section">
+      <div class="aside-label">Surfaces</div>
+      <div id="surfaces-panel"></div>
+    </div>
+
+    <div class="aside-section">
+      <div class="aside-label">Opacity</div>
+      <div id="opacity-panel"></div>
+    </div>
+
+    <div class="aside-section">
+      <div class="aside-label">Display</div>
+      <div class="cam-grid">
+        <button class="cam-btn full" id="btn-wireframe">WIREFRAME OFF</button>
+      </div>
+    </div>
+
+    <div class="aside-section">
+      <div class="aside-label">Camera</div>
+      <div class="cam-grid">
+        <button class="cam-btn" id="btn-top">TOP</button>
+        <button class="cam-btn" id="btn-front">FRONT</button>
+        <button class="cam-btn" id="btn-side">SIDE</button>
+        <button class="cam-btn" id="btn-persp">PERSP</button>
+        <button class="cam-btn full" id="btn-fit">FIT ALL</button>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script type="module">
+  import * as THREE from 'three';
+  import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+  import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+  const container = document.getElementById('viewer');
+  const overlay = document.getElementById('overlay');
+  const loadStatus = document.getElementById('load-status');
+  const surfacesPanel = document.getElementById('surfaces-panel');
+  const opacityPanel = document.getElementById('opacity-panel');
+  const wireframeBtn = document.getElementById('btn-wireframe');
+
+  const renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    logarithmicDepthBuffer: true
+  });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(container.clientWidth, container.clientHeight);
+  container.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0d0f12);
+
+  const camera = new THREE.PerspectiveCamera(
+    45,
+    container.clientWidth / container.clientHeight,
+    0.1,
+    1e10
+  );
+
+  scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.screenSpacePanning = true;
+
+  const modelGroup = new THREE.Group();
+  scene.add(modelGroup);
+
+  const loader = new GLTFLoader();
+  const surfaceEntries = [];
+  let wireframeEnabled = false;
+
+  function niceName(filename) {
+    return filename
+      .replace(/\.glb$/i, '')
+      .replace(/[_-]+/g, ' ')
+      .replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  function colorFromIndex(index) {
+    const palette = [
+      0xff3b30,
+      0x007aff,
+      0x34c759,
+      0xffcc00,
+      0xaf52de,
+      0xff9500,
+      0x00c7be,
+      0xff2d55
+    ];
+    return new THREE.Color(palette[index % palette.length]);
+  }
+
+  async function getSurfaceFiles() {
+    const response = await fetch('./models/index.json');
+    if (!response.ok) {
+      throw new Error('Could not load models/index.json');
+    }
+
+    const files = await response.json();
+
+    if (!Array.isArray(files)) {
+      throw new Error('models/index.json must contain an array');
+    }
+
+    return files.filter(f => typeof f === 'string' && f.toLowerCase().endsWith('.glb'));
+  }
+
+  function createSurfaceMaterial(color, opacity = 0.78) {
+    return new THREE.MeshBasicMaterial({
+      color,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity,
+      depthWrite: false,
+      wireframe: wireframeEnabled
+    });
+  }
+
+  function applySurfaceMaterial(root, color, meshStore, surfaceName) {
+    let meshCount = 0;
+
+    root.traverse(obj => {
+      if (!obj.isMesh) return;
+
+      meshCount++;
+
+      if (!obj.geometry.attributes.normal) {
+        obj.geometry.computeVertexNormals();
+      }
+
+      obj.material = createSurfaceMaterial(color.clone(), 0.78);
+      meshStore.push(obj);
+    });
+
+    console.log(`Loaded surface: ${surfaceName} | meshes: ${meshCount} | color: #${color.getHexString()}`);
+  }
+
+  function buildSidebar() {
+    surfacesPanel.innerHTML = '';
+    opacityPanel.innerHTML = '';
+
+    surfaceEntries.forEach((entry, idx) => {
+      const hex = `#${entry.color.getHexString()}`;
+
+      const surfRow = document.createElement('div');
+      surfRow.className = 'surf-row';
+      surfRow.innerHTML = `
+        <button class="vis-btn" data-idx="${idx}" title="Toggle visibility">●</button>
+        <span class="surf-dot" style="background:${hex}"></span>
+        <span class="surf-name">${entry.name}</span>
+      `;
+      surfacesPanel.appendChild(surfRow);
+
+      const opRow = document.createElement('div');
+      opRow.className = 'op-row';
+      opRow.innerHTML = `
+        <span class="op-dot" style="background:${hex}"></span>
+        <input type="range" min="0" max="100" value="78" data-idx="${idx}">
+        <span class="op-val" data-op="${idx}">78</span>
+      `;
+      opacityPanel.appendChild(opRow);
+    });
+
+    surfacesPanel.querySelectorAll('.vis-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.idx);
+        const entry = surfaceEntries[idx];
+        const hidden = btn.classList.toggle('hidden-surf');
+        entry.root.visible = !hidden;
+      });
+    });
+
+    opacityPanel.querySelectorAll('input[type="range"][data-idx]').forEach(slider => {
+      slider.addEventListener('input', () => {
+        const idx = Number(slider.dataset.idx);
+        const val = Number(slider.value);
+        const op = val / 100;
+
+        const label = opacityPanel.querySelector(`.op-val[data-op="${idx}"]`);
+        if (label) label.textContent = val;
+
+        surfaceEntries[idx].meshes.forEach(mesh => {
+          mesh.material.opacity = op;
+          mesh.material.transparent = op < 1.0;
+          mesh.material.needsUpdate = true;
+        });
+      });
+    });
+  }
+
+  function loadSurface(file, color, idx) {
+    return new Promise((resolve, reject) => {
+      loader.load(
+        `./models/${file}`,
+        gltf => {
+          const root = gltf.scene;
+          const meshes = [];
+          const name = niceName(file);
+
+          applySurfaceMaterial(root, color, meshes, name);
+
+          // small visual offset only to avoid perfect overlap while debugging
+          root.position.y += idx * 40;
+
+          modelGroup.add(root);
+
+          resolve({
+            name,
+            file,
+            color,
+            meshes,
+            root
+          });
+        },
+        undefined,
+        reject
+      );
+    });
+  }
+
+  function fitCamera(direction = 'persp') {
+    modelGroup.updateMatrixWorld(true);
+
+    const box = new THREE.Box3().setFromObject(modelGroup);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+
+    const maxDim = Math.max(size.x, size.y, size.z) || 1000;
+    const dist = maxDim * 1.8;
+
+    let pos;
+    switch (direction) {
+      case 'top':
+        pos = new THREE.Vector3(center.x, center.y + dist, center.z + 0.001);
+        break;
+      case 'front':
+        pos = new THREE.Vector3(center.x, center.y, center.z + dist);
+        break;
+      case 'side':
+        pos = new THREE.Vector3(center.x + dist, center.y, center.z);
+        break;
+      default:
+        pos = new THREE.Vector3(
+          center.x + dist * 0.8,
+          center.y + dist * 0.6,
+          center.z + dist
+        );
+    }
+
+    camera.position.copy(pos);
+    camera.near = Math.max(maxDim * 0.00005, 0.1);
+    camera.far = maxDim * 80;
+    camera.updateProjectionMatrix();
+
+    controls.target.copy(center);
+    controls.minDistance = maxDim * 0.005;
+    controls.maxDistance = maxDim * 15;
+    controls.update();
+  }
+
+  function setWireframe(enabled) {
+    wireframeEnabled = enabled;
+    wireframeBtn.textContent = enabled ? 'WIREFRAME ON' : 'WIREFRAME OFF';
+
+    surfaceEntries.forEach(entry => {
+      entry.meshes.forEach(mesh => {
+        mesh.material.wireframe = enabled;
+        mesh.material.needsUpdate = true;
+      });
+    });
+  }
+
+  async function init() {
+    try {
+      const files = await getSurfaceFiles();
+
+      if (!files.length) {
+        throw new Error('No .glb files listed in models/index.json');
+      }
+
+      const promises = files.map((file, idx) => {
+        const color = colorFromIndex(idx);
+        return loadSurface(file, color, idx);
+      });
+
+      const loaded = await Promise.all(promises);
+      surfaceEntries.push(...loaded);
+
+      buildSidebar();
+      fitCamera('persp');
+
+      overlay.classList.add('fade');
+      loadStatus.textContent = 'LOADED';
+      loadStatus.className = 'ok';
+    } catch (err) {
+      console.error(err);
+      overlay.querySelector('.overlay-txt').textContent = 'ERROR — check console';
+      loadStatus.textContent = 'ERROR';
+      loadStatus.className = 'err';
+    }
+  }
+
+  wireframeBtn.addEventListener('click', () => {
+    setWireframe(!wireframeEnabled);
+  });
+
+  document.getElementById('btn-top').addEventListener('click', () => fitCamera('top'));
+  document.getElementById('btn-front').addEventListener('click', () => fitCamera('front'));
+  document.getElementById('btn-side').addEventListener('click', () => fitCamera('side'));
+  document.getElementById('btn-persp').addEventListener('click', () => fitCamera('persp'));
+  document.getElementById('btn-fit').addEventListener('click', () => fitCamera('persp'));
+
+  window.addEventListener('resize', () => {
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+  });
+
+  function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+  }
+
+  init();
+  animate();
+</script>
+</body>
+</html>
