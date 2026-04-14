@@ -33,7 +33,7 @@
     #app {
       display: grid;
       grid-template-rows: 52px 1fr;
-      grid-template-columns: 1fr 260px;
+      grid-template-columns: 1fr 280px;
       height: 100vh;
     }
 
@@ -101,14 +101,18 @@
       margin-bottom: 10px;
     }
 
-    .surf-row {
+    .surf-row, .seis-row {
       display: flex;
       align-items: center;
       gap: 8px;
       margin-bottom: 10px;
     }
 
-    .surf-row:last-child { margin-bottom: 0; }
+    .surf-row:last-child,
+    .seis-row:last-child,
+    .op-row:last-child {
+      margin-bottom: 0;
+    }
 
     .vis-btn {
       width: 28px;
@@ -129,14 +133,22 @@
     .vis-btn:hover { background: var(--border); }
     .vis-btn.hidden-surf { opacity: 0.3; }
 
-    .surf-dot {
+    .surf-dot,
+    .seis-dot,
+    .op-dot {
       width: 10px;
       height: 10px;
       border-radius: 50%;
       flex-shrink: 0;
     }
 
-    .surf-name {
+    .op-dot {
+      width: 8px;
+      height: 8px;
+    }
+
+    .surf-name,
+    .seis-name {
       font-size: 13px;
       font-weight: 600;
       flex: 1;
@@ -150,15 +162,6 @@
       align-items: center;
       gap: 8px;
       margin-bottom: 8px;
-    }
-
-    .op-row:last-child { margin-bottom: 0; }
-
-    .op-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      flex-shrink: 0;
     }
 
     .op-row input[type=range] {
@@ -277,7 +280,7 @@
   <div id="viewer">
     <div id="overlay">
       <div class="spinner"></div>
-      <div class="overlay-txt">LOADING SURFACES…</div>
+      <div class="overlay-txt">LOADING MODEL…</div>
     </div>
     <div id="hints">
       LMB drag · rotate &nbsp;|&nbsp; RMB drag · pan &nbsp;|&nbsp; scroll · zoom
@@ -291,8 +294,18 @@
     </div>
 
     <div class="aside-section">
-      <div class="aside-label">Opacity</div>
+      <div class="aside-label">Surface Opacity</div>
       <div id="opacity-panel"></div>
+    </div>
+
+    <div class="aside-section">
+      <div class="aside-label">Seismic</div>
+      <div id="seismic-panel"></div>
+    </div>
+
+    <div class="aside-section">
+      <div class="aside-label">Seismic Opacity</div>
+      <div id="seismic-opacity-panel"></div>
     </div>
 
     <div class="aside-section">
@@ -317,14 +330,17 @@
 
 <script type="module">
   import * as THREE from 'three';
-  import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+  import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
   import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
   const container = document.getElementById('viewer');
   const overlay = document.getElementById('overlay');
   const loadStatus = document.getElementById('load-status');
+
   const surfacesPanel = document.getElementById('surfaces-panel');
   const opacityPanel = document.getElementById('opacity-panel');
+  const seismicPanel = document.getElementById('seismic-panel');
+  const seismicOpacityPanel = document.getElementById('seismic-opacity-panel');
   const wireframeBtn = document.getElementById('btn-wireframe');
 
   const renderer = new THREE.WebGLRenderer({
@@ -345,27 +361,40 @@
     1e10
   );
 
+  camera.up.set(0, 0, 1);
+
   scene.add(new THREE.AmbientLight(0xffffff, 1.0));
 
-camera.up.set(0, 0, 1);
-
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.08;
-  controls.screenSpacePanning = true;
-  controls.minPolarAngle = 0;
-  controls.maxPolarAngle = Math.PI;
+  const controls = new TrackballControls(camera, renderer.domElement);
+  controls.rotateSpeed = 4.0;
+  controls.zoomSpeed = 1.4;
+  controls.panSpeed = 1.2;
+  controls.dynamicDampingFactor = 0.12;
+  controls.staticMoving = false;
 
   const modelGroup = new THREE.Group();
   scene.add(modelGroup);
 
   const loader = new GLTFLoader();
+  const textureLoader = new THREE.TextureLoader();
+
   const surfaceEntries = [];
+  const seismicEntries = [];
   let wireframeEnabled = false;
 
   function niceName(filename) {
     return filename
+      .replace(/^.*[\\/]/, '')
       .replace(/\.glb$/i, '')
+      .replace(/[_-]+/g, ' ')
+      .replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  function niceSeismicName(nameOrPath) {
+    return String(nameOrPath)
+      .replace(/^.*[\\/]/, '')
+      .replace(/_meta\.json$/i, '')
+      .replace(/\.json$/i, '')
       .replace(/[_-]+/g, ' ')
       .replace(/\b\w/g, c => c.toUpperCase());
   }
@@ -386,57 +415,59 @@ camera.up.set(0, 0, 1);
 
   async function getSurfaceFiles() {
     const response = await fetch('./models/index.json');
-    if (!response.ok) {
-      throw new Error('Could not load models/index.json');
-    }
-
+    if (!response.ok) throw new Error('Could not load models/index.json');
     const files = await response.json();
-
-    if (!Array.isArray(files)) {
-      throw new Error('models/index.json must contain an array');
-    }
-
+    if (!Array.isArray(files)) throw new Error('models/index.json must contain an array');
     return files.filter(f => typeof f === 'string' && f.toLowerCase().endsWith('.glb'));
   }
 
-  function createSurfaceMaterial(color, opacity = 0.92) {
-  return new THREE.MeshBasicMaterial({
-    color,
-    side: THREE.DoubleSide,
-    transparent: true,
-    opacity,
-    depthTest: true,
-    depthWrite: false,
-    wireframe: wireframeEnabled
-  });
-}
-
-  function applySurfaceMaterial(root, color, meshStore, surfaceName, surfaceIndex, totalSurfaces) {
-  let meshCount = 0;
-
-  root.traverse(obj => {
-    if (!obj.isMesh) return;
-
-    meshCount++;
-
-    if (!obj.geometry.attributes.normal) {
-      obj.geometry.computeVertexNormals();
+  async function getSeismicFiles() {
+    try {
+      const response = await fetch('./seismic/index.json');
+      if (!response.ok) return [];
+      const files = await response.json();
+      if (!Array.isArray(files)) return [];
+      return files.filter(f => typeof f === 'string' && f.toLowerCase().endsWith('.json'));
+    } catch {
+      return [];
     }
+  }
 
-    obj.material = createSurfaceMaterial(color.clone(), 0.92);
+  function createSurfaceMaterial(color, opacity = 0.92) {
+    return new THREE.MeshBasicMaterial({
+      color,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity,
+      depthTest: true,
+      depthWrite: false,
+      wireframe: wireframeEnabled
+    });
+  }
 
-    // deeper surfaces drawn first, shallower surfaces drawn last
-    obj.renderOrder = surfaceIndex;
+  function applySurfaceMaterial(root, color, meshStore, surfaceName, surfaceIndex) {
+    let meshCount = 0;
 
-    meshStore.push(obj);
-  });
+    root.traverse(obj => {
+      if (!obj.isMesh) return;
 
-  console.log(
-    `Loaded surface: ${surfaceName} | meshes: ${meshCount} | color: #${color.getHexString()} | renderOrder: ${surfaceIndex}`
-  );
-}
+      meshCount++;
 
-  function buildSidebar() {
+      if (!obj.geometry.attributes.normal) {
+        obj.geometry.computeVertexNormals();
+      }
+
+      obj.material = createSurfaceMaterial(color.clone(), 0.92);
+      obj.renderOrder = surfaceIndex;
+      meshStore.push(obj);
+    });
+
+    console.log(
+      `Loaded surface: ${surfaceName} | meshes: ${meshCount} | color: #${color.getHexString()} | renderOrder: ${surfaceIndex}`
+    );
+  }
+
+  function buildSurfaceSidebar() {
     surfacesPanel.innerHTML = '';
     opacityPanel.innerHTML = '';
 
@@ -476,7 +507,6 @@ camera.up.set(0, 0, 1);
         const idx = Number(slider.dataset.idx);
         const val = Number(slider.value);
         const op = val / 100;
-
         const label = opacityPanel.querySelector(`.op-val[data-op="${idx}"]`);
         if (label) label.textContent = val;
 
@@ -489,32 +519,157 @@ camera.up.set(0, 0, 1);
     });
   }
 
-  function loadSurface(file, color, idx, totalFiles) {
-  return new Promise((resolve, reject) => {
-    loader.load(
-      `./models/${file}`,
-      gltf => {
-        const root = gltf.scene;
-        const meshes = [];
-        const name = niceName(file);
+  function buildSeismicSidebar() {
+    seismicPanel.innerHTML = '';
+    seismicOpacityPanel.innerHTML = '';
 
-        applySurfaceMaterial(root, color, meshes, name, idx, totalFiles);
+    seismicEntries.forEach((entry, idx) => {
+      const hex = '#9aa6b2';
 
-        // no artificial offset now
-        modelGroup.add(root);
+      const row = document.createElement('div');
+      row.className = 'seis-row';
+      row.innerHTML = `
+        <button class="vis-btn" data-seis-idx="${idx}" title="Toggle visibility">●</button>
+        <span class="seis-dot" style="background:${hex}"></span>
+        <span class="seis-name">${entry.name}</span>
+      `;
+      seismicPanel.appendChild(row);
 
-        resolve({
-          name,
-          file,
-          color,
-          meshes,
-          root
-        });
-      },
-      undefined,
-      reject
-    );
+      const opRow = document.createElement('div');
+      opRow.className = 'op-row';
+      opRow.innerHTML = `
+        <span class="op-dot" style="background:${hex}"></span>
+        <input type="range" min="0" max="100" value="${Math.round(entry.opacity * 100)}" data-seis-op-idx="${idx}">
+        <span class="op-val" data-seis-op="${idx}">${Math.round(entry.opacity * 100)}</span>
+      `;
+      seismicOpacityPanel.appendChild(opRow);
+    });
+
+    seismicPanel.querySelectorAll('.vis-btn[data-seis-idx]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.seisIdx);
+        const entry = seismicEntries[idx];
+        const hidden = btn.classList.toggle('hidden-surf');
+        entry.mesh.visible = !hidden;
+      });
+    });
+
+    seismicOpacityPanel.querySelectorAll('input[type="range"][data-seis-op-idx]').forEach(slider => {
+      slider.addEventListener('input', () => {
+        const idx = Number(slider.dataset.seisOpIdx);
+        const val = Number(slider.value);
+        const op = val / 100;
+        const label = seismicOpacityPanel.querySelector(`.op-val[data-seis-op="${idx}"]`);
+        if (label) label.textContent = val;
+
+        seismicEntries[idx].opacity = op;
+        seismicEntries[idx].mesh.material.opacity = op;
+        seismicEntries[idx].mesh.material.transparent = op < 1.0;
+        seismicEntries[idx].mesh.material.needsUpdate = true;
+      });
+    });
+  }
+
+  function loadSurface(file, color, idx) {
+    return new Promise((resolve, reject) => {
+      loader.load(
+        `./models/${file}`,
+        gltf => {
+          const root = gltf.scene;
+          const meshes = [];
+          const name = niceName(file);
+
+          applySurfaceMaterial(root, color, meshes, name, idx);
+          modelGroup.add(root);
+
+          resolve({ name, file, color, meshes, root });
+        },
+        undefined,
+        reject
+      );
+    });
+  }
+
+ async function loadSeismicPanel(metaUrl, idx) {
+  const response = await fetch(metaUrl);
+  if (!response.ok) {
+    throw new Error(`Could not load ${metaUrl}`);
+  }
+
+  const meta = await response.json();
+
+  const texture = await textureLoader.loadAsync(meta.image);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.needsUpdate = true;
+
+  const start = new THREE.Vector3(...meta.start);
+  const end = new THREE.Vector3(...meta.end);
+
+  const lineVec = new THREE.Vector3().subVectors(end, start);
+  const width = lineVec.length();
+  const height = Math.abs(meta.z_bottom - meta.z_top) || 1;
+
+  if (!Number.isFinite(width) || width <= 0) {
+    throw new Error(`Invalid seismic width in ${metaUrl}`);
+  }
+
+  const geometry = new THREE.PlaneGeometry(width, height);
+
+  const material = new THREE.MeshBasicMaterial({
+    map: texture,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.85,
+    depthTest: true,
+    depthWrite: false
   });
+
+  const panel = new THREE.Mesh(geometry, material);
+
+  const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
+  const zMid = (meta.z_top + meta.z_bottom) / 2;
+  panel.position.set(mid.x, mid.y, zMid);
+
+  // Direction of seismic line projected in XY
+  const dir = lineVec.clone();
+  dir.z = 0;
+
+  if (dir.lengthSq() < 1e-12) {
+    throw new Error(`Seismic line has invalid start/end coordinates in ${metaUrl}`);
+  }
+
+  dir.normalize();
+
+  // Viewer uses Z as vertical
+  const up = new THREE.Vector3(0, 0, 1);
+
+  // Horizontal normal to the seismic plane
+  const normal = new THREE.Vector3().crossVectors(dir, up);
+
+  if (normal.lengthSq() < 1e-12) {
+    throw new Error(`Could not compute seismic plane normal for ${metaUrl}`);
+  }
+
+  normal.normalize();
+
+  // Orient plane using quaternion instead of raw rotations
+  const target = panel.position.clone().add(normal);
+  const temp = new THREE.Object3D();
+  temp.position.copy(panel.position);
+  temp.up.copy(up);
+  temp.lookAt(target);
+  panel.quaternion.copy(temp.quaternion);
+
+  panel.renderOrder = 1000 + idx;
+
+  modelGroup.add(panel);
+
+  return {
+    name: meta.name || niceSeismicName(metaUrl),
+    meta,
+    mesh: panel,
+    opacity: 0.85
+  };
 }
 
   function fitCamera(direction = 'persp') {
@@ -552,8 +707,6 @@ camera.up.set(0, 0, 1);
     camera.updateProjectionMatrix();
 
     controls.target.copy(center);
-    controls.minDistance = maxDim * 0.005;
-    controls.maxDistance = maxDim * 15;
     controls.update();
   }
 
@@ -571,21 +724,29 @@ camera.up.set(0, 0, 1);
 
   async function init() {
     try {
-      const files = await getSurfaceFiles();
+      const surfaceFiles = await getSurfaceFiles();
+      const seismicFiles = await getSeismicFiles();
 
-      if (!files.length) {
+      if (!surfaceFiles.length) {
         throw new Error('No .glb files listed in models/index.json');
       }
 
-      const promises = files.map((file, idx) => {
-  const color = colorFromIndex(idx);
-  return loadSurface(file, color, idx, files.length);
-});
+      const surfacePromises = surfaceFiles.map((file, idx) => {
+        const color = colorFromIndex(idx);
+        return loadSurface(file, color, idx);
+      });
 
-      const loaded = await Promise.all(promises);
-      surfaceEntries.push(...loaded);
+      const loadedSurfaces = await Promise.all(surfacePromises);
+      surfaceEntries.push(...loadedSurfaces);
+      buildSurfaceSidebar();
 
-      buildSidebar();
+      if (seismicFiles.length) {
+        const seismicPromises = seismicFiles.map((metaUrl, idx) => loadSeismicPanel(metaUrl, idx));
+        const loadedSeismic = await Promise.all(seismicPromises);
+        seismicEntries.push(...loadedSeismic);
+        buildSeismicSidebar();
+      }
+
       fitCamera('persp');
 
       overlay.classList.add('fade');
@@ -615,6 +776,8 @@ camera.up.set(0, 0, 1);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
+    controls.handleResize();
+    controls.update();
   });
 
   function animate() {
